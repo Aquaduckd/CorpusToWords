@@ -32,10 +32,14 @@ export const DEFAULT_CORPUS_OPTIONS: CorpusOptions = {
 };
 
 export const DEFAULT_CORPUS_FILTER: CorpusFilter = {
-  mode: "all",
+  mode: "top-n",
   topN: 200,
   topPercent: 10,
 };
+
+function isWhitespace(char: string): boolean {
+  return char === " " || char === "\n" || char === "\r" || char === "\t" || char === "\f" || char === "\v";
+}
 
 export function normalizeCorpus(text: string, options: CorpusOptions): string {
   let result = text;
@@ -44,14 +48,10 @@ export function normalizeCorpus(text: string, options: CorpusOptions): string {
     result = result.toLowerCase();
   }
 
-  // Compose decomposed letters + accents (e.g. e + combining acute -> é).
   result = result.normalize("NFC");
-
-  // Zero-width and other invisible format characters are not punctuation.
   result = result.replace(/\p{Cf}/gu, "");
 
   if (options.stripPunctuation) {
-    // Join contractions and hyphenations before stripping word-boundary punctuation.
     result = result.replace(/(?<=\p{L})[''\u2019\u02BC-](?=\p{L})/gu, "");
     result = result.replace(/[\p{P}\p{S}]/gu, " ");
   }
@@ -63,21 +63,41 @@ export function normalizeCorpus(text: string, options: CorpusOptions): string {
   return result;
 }
 
-export function tokenize(text: string): string[] {
-  return text.trim().split(/\s+/).filter(Boolean);
-}
-
-export function countWords(tokens: string[], minLength: number): WordCount[] {
+/** Single-pass token count + frequency map (avoids materializing all tokens). */
+export function countWordsFromText(
+  text: string,
+  minLength: number,
+): { ranked: WordCount[]; tokenCount: number } {
   const counts = new Map<string, number>();
+  let tokenCount = 0;
 
-  for (const token of tokens) {
-    if (token.length < minLength) continue;
-    counts.set(token, (counts.get(token) ?? 0) + 1);
+  const len = text.length;
+  let index = 0;
+
+  while (index < len) {
+    while (index < len && isWhitespace(text[index]!)) {
+      index += 1;
+    }
+
+    if (index >= len) break;
+
+    const start = index;
+    while (index < len && !isWhitespace(text[index]!)) {
+      index += 1;
+    }
+
+    tokenCount += 1;
+    const token = text.slice(start, index);
+    if (token.length >= minLength) {
+      counts.set(token, (counts.get(token) ?? 0) + 1);
+    }
   }
 
-  return [...counts.entries()]
+  const ranked = [...counts.entries()]
     .map(([word, count]) => ({ word, count }))
     .sort((a, b) => b.count - a.count || a.word.localeCompare(b.word));
+
+  return { ranked, tokenCount };
 }
 
 export function applyFilter(
@@ -122,15 +142,14 @@ export function processCorpus(
   stats: CorpusStats;
 } {
   const normalized = normalizeCorpus(text, options);
-  const tokens = tokenize(normalized);
-  const ranked = countWords(tokens, options.minLength);
-  const filtered = applyFilter(ranked, filter, tokens.length);
+  const { ranked, tokenCount } = countWordsFromText(normalized, options.minLength);
+  const filtered = applyFilter(ranked, filter, tokenCount);
 
   return {
     ranked,
     filtered,
     stats: {
-      tokenCount: tokens.length,
+      tokenCount,
       uniqueCount: ranked.length,
       filteredCount: filtered.length,
     },

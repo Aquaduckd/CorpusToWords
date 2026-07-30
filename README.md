@@ -4,15 +4,15 @@ Turn arbitrary text into a typing-test word list. Paste or load a corpus, normal
 
 ## Features
 
-- **Paste or load** — drop in text or open a `.txt` file
+- **Paste or load** — drop in text or open a `.txt` file (large files stay in memory, not in the editor)
 - **Normalize** — lowercase, strip punctuation, remove numbers, minimum word length
-- **Filter**
+- **Filter** (default: top 200 words)
   - All unique words
   - Top **N** most frequent words
   - Top **N%** by rank (most frequent unique words)
   - Top **N%** by coverage (smallest set of words that account for N% of tokens)
-- **Preview** — ranked table with counts (click **Apply** to process)
-- **Export** — space-separated word list, copy or download
+- **Preview** — ranked table with counts, up to 1,000 rows (click **Apply** to process)
+- **Export** — space-separated word list, copy or download (full list even when preview is truncated)
 
 ## Run locally
 
